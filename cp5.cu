@@ -179,6 +179,11 @@ void correlate(int ny, int nx, const float *data, float *result) {
     );
     CHECK(cudaGetLastError());
 
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start);
     dim3 grid1(nyp / 128, nyp / 128);
     dim3 block1(16, 16);
     matmul_kernel_v3<<<grid1, block1>>>(
@@ -186,6 +191,20 @@ void correlate(int ny, int nx, const float *data, float *result) {
         nyp, nxp, ny, nx
     );
     CHECK(cudaGetLastError());
+
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+
+    float msec = 0;
+    cudaEventElapsedTime(&msec, start, stop);
+
+    double total_flops = (double)ny * (double)ny * (double)nx / 1e9;
+    double secs = msec / 1000.0;
+    double gflops = total_flops / secs;
+
+    printf("Elapsed Time : %.3f ms (%.3f s)\n", msec, secs);
+    printf(" Total FLOP  : %.3e GFLOP\n", total_flops);
+    printf("Performance  : %.3f GFLOP/s\n", gflops);
 
     cudaMemcpy(result, d_C, ny * ny * sizeof(float), cudaMemcpyDeviceToHost);
     CHECK(cudaGetLastError());
@@ -201,7 +220,19 @@ void correlate(int ny, int nx, const float *data, float *result) {
 
 int main() {
 
-    int nx = 4000, ny = 4000;
-    
+    int nx = 9000, ny = 9000;
+    float *data = (float *)malloc(nx * ny * sizeof(float));
+    float *result = (float *)malloc(ny * ny * sizeof(float));
+
+    for(int i=0; i<ny; i++) {
+        for(int j=0; j<nx; j++) {
+            data[i * nx + j] = rand() / float(RAND_MAX) * 2.0f - 1.0f;
+        }
+    }
+
+    correlate(
+        ny, nx,
+        data, result
+    );
 
 }
