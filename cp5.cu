@@ -198,7 +198,7 @@ void correlate(int ny, int nx, const float *data, float *result) {
     float msec = 0;
     cudaEventElapsedTime(&msec, start, stop);
 
-    double total_flops = (double)ny * (double)ny * (double)nx / 1e9;
+    double total_flops = (double)ny * (double)(ny + 1) * (double)nx / 1e9;
     double secs = msec / 1000.0;
     double gflops = total_flops / secs;
 
@@ -220,7 +220,7 @@ void correlate(int ny, int nx, const float *data, float *result) {
 
 int main() {
 
-    int nx = 9000, ny = 9000;
+    int nx = 14000, ny = 14000;
     float *data = (float *)malloc(nx * ny * sizeof(float));
     float *result = (float *)malloc(ny * ny * sizeof(float));
 

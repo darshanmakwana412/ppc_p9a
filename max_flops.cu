@@ -5,30 +5,30 @@
 extern "C" __global__
 void gpu_kernel(
     float *out,
-    int iters, float seed
+    int N, float seed
 ) {
 
-    float a = seed + threadIdx.x;
-    float b = seed - threadIdx.x;
+    int tid = threadIdx.x;
+    float a = seed + tid;
+    float b = seed - tid;
 
-    #pragma unroll (100)
-    for (int i = 0; i < iters; i++) {
+    for (int i = 0; i < N; i++) {
         a = a * b + a;
     }
 
-    out[blockIdx.x * blockDim.x + threadIdx.x] = a;
+    if(tid == 0) out[blockIdx.x * blockDim.x + tid] = a;
 }
 
 int main() {
 
-    int iters = 1e6;
+    int N = 1e7;
     float seed = 0.869f;
 
     int threads = 256;
     int blocks = 1024;
-    size_t N = blocks * threads;
+    size_t size = blocks * threads;
     float *d_out;
-    cudaMalloc(&d_out, N * sizeof(float));
+    cudaMalloc(&d_out, size * sizeof(float));
 
     cudaDeviceSynchronize();
 
@@ -38,7 +38,7 @@ int main() {
 
     cudaEventRecord(start);
     gpu_kernel<<<blocks,threads>>>(
-        d_out, iters, seed
+        d_out, N, seed
     );
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -46,7 +46,7 @@ int main() {
     float msec = 0;
     cudaEventElapsedTime(&msec, start, stop);
 
-    double total_flops = double(iters) * blocks * threads * 2 / 1e9;
+    double total_flops = double(N) * blocks * threads * 2 / 1e9;
     double secs = msec / 1000.0;
     double gflops = total_flops / secs;
 
