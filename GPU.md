@@ -124,7 +124,7 @@ gpu_kernel (1024, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.6
 We can see that our kernel achieved a compute capacity of `99.18%` which is all thanks to ~0% memory utilization. We also achieved 95.84% of max occupancy with 46 active warps out of 48
 
 Looking at the ptx code with `nvcc --ptx -arch=sm_86 max_flops.cu -o main.ptx` we see that the compiler directly generated fma f32 instructions while unrolling the inner loop by 4 for us
-```
+```assembly
 $L__BB0_3:
 	fma.rn.f32 	%f13, %f2, %f20, %f20;
 	fma.rn.f32 	%f14, %f2, %f13, %f13;
@@ -134,10 +134,11 @@ $L__BB0_3:
 	setp.ne.s32 	%p3, %r13, 0;
 	@%p3 bra 	$L__BB0_3;
 ```
+The executable can be found at [max_flops](max_flops) and the ptx code at [max_flops.ptx](max_flops.ptx)
 
 ## Comparison with CP5 Solution
 
-Now for comparison with the fastest [cp5.cu](cp5.cu) solution we again benchmark using `nvcc cp5.cu -O3 -arch=sm_86 -o main && ./main`. It follows the exact same code as submitted to cp5 without any modification and nx and ny set to `14000`
+Now for comparison with the fastest [cp5.cu](cp5.cu) solution we again benchmark using `nvcc cp5.cu -O3 -arch=sm_86 -o main && ./main`. It follows the exact same code as submitted to cp5 without any modification and nx and ny set to `14000`, the executable can be found at [cp5](cp5)
 ```cpp
 Elapsed Time : 1050.230 ms (1.050 s)
  Total FLOP  : 2.744e+03 GFLOP
@@ -203,3 +204,29 @@ matmul_kernel_v3 (110, 110, 1)x(16, 16, 1), Context 1, Stream 7, Device 0, CC 8.
 ```
 
 This time we achieved 70% of max compute throughput and only 33% max theoretical occupancy which is due to high register use of 100 per thread and 16 active warps per block possible and also our memory throughput is 55% of peak. Thus we are register bound
+
+Looking at the ptx code from [cp5.ptx](cp5.ptx) we see that the compiler issues vectorized loads from shared memory this time
+```assembly
+	fma.rn.f32 	%f701, %f636, %f617, %f605;
+	fma.rn.f32 	%f702, %f636, %f618, %f606;
+	fma.rn.f32 	%f703, %f636, %f619, %f607;
+	fma.rn.f32 	%f704, %f636, %f620, %f608;
+	ld.shared.v4.f32 	{%f705, %f706, %f707, %f708}, [%r74+2048];
+	ld.shared.v4.f32 	{%f713, %f714, %f715, %f716}, [%r74+2304];
+	ld.shared.v4.f32 	{%f721, %f722, %f723, %f724}, [%r77+2048];
+	ld.shared.v4.f32 	{%f729, %f730, %f731, %f732}, [%r77+2304];
+	fma.rn.f32 	%f737, %f721, %f705, %f641;
+	fma.rn.f32 	%f738, %f721, %f706, %f642;
+	fma.rn.f32 	%f739, %f721, %f707, %f643;
+```
+
+not only that we can also see that the compiler also generated code for vectorized load from global to shared memory
+```assembly
+$L__BB1_3:
+	.loc	1 108 9
+	ld.global.nc.v4.u32 	{%r56, %r57, %r58, %r59}, [%rd39];
+	st.shared.v4.u32 	[%r6], {%r56, %r57, %r58, %r59};
+	.loc	1 109 9
+	ld.global.nc.v4.u32 	{%r64, %r65, %r66, %r67}, [%rd38];
+	st.shared.v4.u32 	[%r5], {%r64, %r65, %r66, %r67};
+```
