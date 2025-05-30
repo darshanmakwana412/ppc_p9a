@@ -87,3 +87,77 @@ $$
 
 This matches with the processing power with boost in the wiki of GeForce 2050
 
+## Practical limitations of CPU
+
+For this we will initialize a vector of size `a` of size 8 (so the compiler can easily auto vectorize the inner for loop) and then mutiply it with a scalar `b` and add it back to itself. We will do this $M * N$ times. The main part of the code is very straight forward and simple we do $a[k] = a[k] \times b + a[k], \forall k\in [8]$. This code does a total of $16MN + 16N$ flops, since M is of the order of `1e5` we will ignore the `16N`. This gives us a total of `16MN` flops
+```cpp
+#pragma omp parallel for
+for (int i = 0; i < M; i++) {
+    float d[8] = {};
+    for (int j = 0; j < N; j++)
+        for (int k = 0; k < 8; k++)
+            d[k] = a[k] * b + d[k];
+
+    for (int k = 0; k < 8; k++) a[k] += d[k];
+}
+```
+
+We will then time how long it takes to run this using `std::chrono::high_resolution_clock` and we will also measure the clock cycles during it's execution using `__rdtscp` intrinsics this will help us get the measured clock freq. The entire code is at [cpu_flops.cpp](./cpu_flops.cpp) we will run this with aggressive auto vectorization and loop unrolling. [run_cpu.sh](./run_cpu.sh) is a small bash script which runs this code here are the flags that are enabled in it. We also use perf stat for analyzing the instructions and branches and misses
+
+```bash
+export OMP_NUM_THREADS=16
+g++ -fopenmp -O3 -march=native -ffast-math -funroll-loops max_flops.cpp -o main
+perf stat ./main
+```
+
+On running `source run_flops.sh` it prints this
+```bash
+Wall time            : 3.12342 s
+Total FLOPs          : 1600 GFLOP
+=> Achieved          : 512.26 GFLOP/s
+Cycles elapsed       : 6596566797
+=> Measured CPU freq : 2.11197 GHz
+Checksum             : inf
+```
+yeah we also print the sum of the vector `a` after the exectution so the compiler does does not optimize away everything it's inf because we elements of `a` unbounded as we keep on multiplying and adding it's not a big deal. The main things to see is we achieve 512.26 GFLOP/s and measured a clock freq of 2.11GHz. So our estimate of default clock freq was slightly underestimated when we recaculate the theoretical flops of single precision using 2.1GHz clock freq we get 537.6GFLOP/s. So we achieved 95.28% of the peak FLOPS
+
+Inspecting the assembly we see the compiler optimized our inner most for loop
+```s
+.LBE136:
+	.loc 1 26 9 discriminator 2 view .LVU94
+	.loc 1 26 32 discriminator 1 view .LVU95
+	vaddps	%ymm10, %ymm4, %ymm4
+	vmovaps	608(%rsp), %ymm13
+	vaddps	%ymm8, %ymm7, %ymm7
+	vaddps	%ymm11, %ymm1, %ymm1
+	vaddps	512(%rsp), %ymm12, %ymm2
+	vaddps	%ymm9, %ymm5, %ymm5
+	vaddps	%ymm15, %ymm6, %ymm6
+	vaddps	%ymm10, %ymm4, %ymm4
+	vaddps	%ymm8, %ymm7, %ymm7
+	vaddps	%ymm11, %ymm1, %ymm1
+	vaddps	%ymm12, %ymm2, %ymm2
+	vaddps	%ymm14, %ymm0, %ymm0
+	vmovaps	%ymm5, 384(%rsp)
+	vmovaps	%ymm6, 480(%rsp)
+	vaddps	608(%rsp), %ymm3, %ymm3
+	vmovaps	%ymm4, 352(%rsp)
+	vaddps	%ymm8, %ymm7, %ymm6
+	vaddps	%ymm12, %ymm2, %ymm2
+	vaddps	%ymm14, %ymm0, %ymm0
+	vaddps	%ymm13, %ymm3, %ymm3
+	vmovaps	%ymm6, 448(%rsp)
+	vaddps	%ymm5, %ymm9, %ymm6
+	vaddps	%ymm4, %ymm10, %ymm5
+	vmovaps	%ymm0, 320(%rsp)
+	vaddps	%ymm11, %ymm1, %ymm4
+	vaddps	%ymm0, %ymm14, %ymm0
+	vaddps	%ymm13, %ymm3, %ymm13
+	vmovaps	%ymm4, 576(%rsp)
+	vaddps	%ymm12, %ymm2, %ymm4
+	vmovaps	%ymm13, 544(%rsp)
+	vaddps	480(%rsp), %ymm15, %ymm13
+```
+
+## Practical limitations of GPU
+
