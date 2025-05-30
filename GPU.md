@@ -16,7 +16,7 @@ Shared mem per multiprocessor: 102400 B
 Multiprocessor count: 16
 Max warps per multiprocessor: 48
 ```
-Thus the GPU has 16 streaming multiprocessors (SM) and from the wiki of [GeForce RTX 2050](https://en.wikipedia.org/wiki/GeForce_RTX_20_series#Laptop) it has 2048 CUDA cores and 64 Tensor Cores. It also has a bandwidth of 112 GB/s and a default clock freq of 1.155 GHz and boost of 1.477 GHz. Each core can execute 1 fma i.e 2 FLOP per cycle, we can then calculate the theoretical max flops as follows
+Thus we have the Nvidia GeForce RTX 2050 as our GPU for this analysis which is based on turing architecture. It has 16 streaming multiprocessors (SM) and from the wiki of [GeForce RTX 2050](https://en.wikipedia.org/wiki/GeForce_RTX_20_series#Laptop) it has 2048 CUDA cores and 64 Tensor Cores. It also has a bandwidth of 112 GB/s and a default clock freq of 1.155 GHz and boost of 1.477 GHz. Each core can execute 1 fma i.e 2 FLOP per cycle, we can then calculate the theoretical max flops as follows
 
 $$
 \begin{aligned}
@@ -32,6 +32,7 @@ $$
 This matches with the processing power @ boost in the wiki of GeForce 2050
 
 [1] - [Nvidia GeForce RTX datasheet](https://www.techpowerup.com/gpu-specs/geforce-rtx-2050-mobile.c3859)
+[2] - [RTX Series comparison](https://www.nvidia.com/fi-fi/geforce/gaming-laptops/compare-20-series/)
 
 ## Practical limitations
 
