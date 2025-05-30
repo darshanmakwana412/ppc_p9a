@@ -1,15 +1,11 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
+// https://siboehm.com/articles/22/CUDA-MMM
 void printOccupancyStats() {
 
     int deviceCount = 0;
-    cudaError_t err = cudaGetDeviceCount(&deviceCount);
-    if (err != cudaSuccess) {
-        std::cerr << "Error fetching device count: "
-                  << cudaGetErrorString(err) << "\n";
-        return;
-    }
+    cudaGetDeviceCount(&deviceCount);
 
     for (int dev = 0; dev < deviceCount; ++dev) {
         cudaDeviceProp prop;
