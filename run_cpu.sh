@@ -1,5 +1,5 @@
 export OMP_NUM_THREADS=24
 
-g++ -fopenmp -g -O3 -march=native -ffast-math -funroll-loops cpu_flops.cpp -o main
+g++ -fopenmp -g -O3 -march=native cpu_flops.cc -o main
 
-./main
+perf stat ./main

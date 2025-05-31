@@ -5,13 +5,15 @@
 
 int main() {
 
-    int num_runs = 5;
+    int num_runs = 1;
     const uint64_t M = 100000, N = 1000000;
     alignas(32) float a[8] = {};
     for (int i = 0; i < 8; i++) a[i] = rand() / float(RAND_MAX) * 2.0f - 1.0f;
     float *out = (float *)malloc(M * sizeof(float));
 
     float b = 0.5f;
+    __m256 a8 = _mm256_load_ps(a);
+    __m256 b8 = _mm256_set1_ps(b);
 
     double seconds = 0;
     unsigned long long cycles = 0;
@@ -23,14 +25,21 @@ int main() {
     
         #pragma omp parallel for schedule(dynamic, 1)
         for (int i = 0; i < M; i++) {
-            alignas(32) float d[8] = {};
-            #pragma unroll(8)
-            for (int j = 0; j < N; j++)
-                for (int k = 0; k < 8; k++)
-                    d[k] = a[k] * b + d[k];
-            float s = 0;
-            for (int k = 0; k < 8; k++) s += d[k];
-            out[i] += s;
+
+            __m256 d8[8] = {};
+            for (int j = 0; j < N; j++) {
+                #pragma unroll
+                for(int i=0; i<8; i++) {
+                    d8[i] = _mm256_fmadd_ps(a8, b8, d8[i]);
+                }
+            }
+
+            // Since N is much larger the flops of this is negligible
+            __m256 s = _mm256_setzero_ps();
+            for(int i=0; i<8; i++) {
+                s = _mm256_add_ps(s, d8[i]);
+            }
+            out[i] = s[0];
         }
     
         auto t1 = std::chrono::high_resolution_clock::now();
@@ -43,7 +52,7 @@ int main() {
     seconds /= num_runs;
     cycles /= num_runs;
 
-    double total_flops = double(M) * double(N) * 16.0 * 1e-9; // GFLOPs
+    double total_flops = double(M) * double(N) * 16.0 * 4 * 1e-9; // GFLOPs
     double gflops = total_flops / seconds;
     double freq_hz = cycles / seconds;
     double freq_ghz = freq_hz / 1e9;
