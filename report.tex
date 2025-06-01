@@ -1,0 +1,699 @@
+\hypertarget{table-of-contents}{%
+\subsection{Table of Contents}\label{table-of-contents}}
+
+\begin{itemize}
+\tightlist
+\item
+  \protect\hyperlink{analysis-of-the-cpu}{Analysis of the CPU}
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \protect\hyperlink{theoretical-limitations-of-cpu}{Theoretical
+    limitations of CPU}
+  \item
+    \protect\hyperlink{practical-limitations-of-cpu}{Practical
+    limitations of CPU}
+  \item
+    \protect\hyperlink{comparison-with-cp3b-solution}{Comparison with
+    CP3B Solution}
+  \end{itemize}
+\item
+  \protect\hyperlink{analysis-of-the-gpu}{Analysis of the GPU}
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \protect\hyperlink{theoretical-limitations-of-gpu}{Theoretical
+    limitations of GPU}
+  \item
+    \protect\hyperlink{practical-limitations-of-gpu}{Practical
+    limitations of GPU}
+  \item
+    \protect\hyperlink{comparison-with-cp5-solution}{Comparison with CP5
+    Solution}
+  \end{itemize}
+\end{itemize}
+
+\hypertarget{analysis-of-the-cpu}{%
+\section{Analysis of the CPU}\label{analysis-of-the-cpu}}
+
+\hypertarget{theoretical-limitations-of-cpu}{%
+\subsection{Theoretical limitations of
+CPU}\label{theoretical-limitations-of-cpu}}
+
+For the cpu running \texttt{lscpu} gives
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{Architecture:}\NormalTok{             x86\_64}
+  \ExtensionTok{CPU}\NormalTok{ op{-}mode}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)}\BuiltInTok{:}\NormalTok{         32{-}bit, 64{-}bit}
+  \ExtensionTok{Address}\NormalTok{ sizes:          46 bits physical, 48 bits virtual}
+  \ExtensionTok{Byte}\NormalTok{ Order:             Little Endian}
+\ExtensionTok{CPU}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)}\BuiltInTok{:}\NormalTok{                   24}
+  \ExtensionTok{On{-}line}\NormalTok{ CPU}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)} \ExtensionTok{list:}\NormalTok{    0{-}23}
+\ExtensionTok{Vendor}\NormalTok{ ID:                GenuineIntel}
+  \ExtensionTok{Model}\NormalTok{ name:             13th Gen Intel}\ErrorTok{(}\ExtensionTok{R}\KeywordTok{)} \ExtensionTok{Core}\ErrorTok{(}\ExtensionTok{TM}\KeywordTok{)} \ExtensionTok{i7{-}13700K}
+    \ExtensionTok{CPU}\NormalTok{ family:           6}
+    \ExtensionTok{Model:}\NormalTok{                183}
+    \ExtensionTok{Thread}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)} \ExtensionTok{per}\NormalTok{ core:   2}
+    \ExtensionTok{Core}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)} \ExtensionTok{per}\NormalTok{ socket:   16}
+    \ExtensionTok{Socket}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)}\BuiltInTok{:}\NormalTok{            1}
+    \ExtensionTok{Stepping:}\NormalTok{             1}
+    \ExtensionTok{CPU}\NormalTok{ max MHz:          5400.0000}
+    \ExtensionTok{CPU}\NormalTok{ min MHz:          800.0000}
+    \ExtensionTok{BogoMIPS:}\NormalTok{             6835.20}
+    \ExtensionTok{Flags:}\NormalTok{                avx avx2 avx\_vnni fma ...}
+\ExtensionTok{Caches} \ErrorTok{(}\FunctionTok{sum}\NormalTok{ of all}\KeywordTok{)}\BuiltInTok{:}      
+  \ExtensionTok{L1d:}\NormalTok{                    640 KiB }\ErrorTok{(}\ExtensionTok{16}\NormalTok{ instances}\KeywordTok{)}
+  \ExtensionTok{L1i:}\NormalTok{                    768 KiB }\ErrorTok{(}\ExtensionTok{16}\NormalTok{ instances}\KeywordTok{)}
+  \ExtensionTok{L2:}\NormalTok{                     24 MiB }\ErrorTok{(}\ExtensionTok{10}\NormalTok{ instances}\KeywordTok{)}
+  \ExtensionTok{L3:}\NormalTok{                     30 MiB }\ErrorTok{(}\ExtensionTok{1}\NormalTok{ instance}\KeywordTok{)}
+\ExtensionTok{NUMA:}                     
+  \ExtensionTok{NUMA}\NormalTok{ node}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)}\BuiltInTok{:}\NormalTok{           1}
+  \ExtensionTok{NUMA}\NormalTok{ node0 CPU}\ErrorTok{(}\ExtensionTok{s}\KeywordTok{)}\BuiltInTok{:}\NormalTok{      0{-}23}
+\end{Highlighting}
+\end{Shaded}
+
+It shows that the cpu is 13th Gen Intel(R) Core(TM) i7-13700K and has 16
+cores and 24 threads, looking more into the
+\href{https://www.intel.com/content/www/us/en/products/sku/230500/intel-core-i713700k-processor-30m-cache-up-to-5-40-ghz/specifications.html}{intel
+doc} of i7-13700K it has 8 performant cores (with hyper threading of 2)
+and 8 efficient cores. For the P-cores it has a base frequency of 3.4GHz
+and turbo frequency of 5.3 GHz while for the E-cores it has a base
+frequency of 2.5GHz and turbo frequency of 4.2GHz
+
+The i7-13700K operates at a default frequency of
+\href{https://www.techpowerup.com/cpu-specs/core-i7-13700k.c2850}{3.4GHz}.
+Since it supports avx2 and each p cores can do 2 inst/cycle on ports 0
+and 1 we can achieve 2 × 8 (8 sp per 256bit vector) × 2 (2 flops per
+fma) = 32 flops/cycle. For 8 p cores we can achieve at max 8 × 32 × 5.3
+GHz = 1356.8 GFLOP/s at turbo frequency
+
+For each e core we achieve 16 flops/cycle and thus we can achieve at max
+8 × 16 × 4.2 GHz = 537.6 GFLOP/s at turbo frequency
+
+Total we can achieve a max flops of 1894.4 GFLOP/s
+
+{[}1{]} -
+\href{https://www.intel.com/content/www/us/en/products/sku/230500/intel-core-i713700k-processor-30m-cache-up-to-5-40-ghz/specifications.html}{13th
+Gen Intel (R) Core(TM) i7-13700K}
+
+{[}2{]} -
+\href{https://www.techpowerup.com/cpu-specs/core-i7-13700k.c2850}{Default
+clock freq of i7-13700K}
+
+\hypertarget{practical-limitations-of-cpu}{%
+\subsection{Practical limitations of
+CPU}\label{practical-limitations-of-cpu}}
+
+For evaluating the practical limitations of the cpu we will load an 8
+element vector \texttt{a} into an avx256 register \texttt{a8} and
+broadcast a scalar \texttt{b} into another avx256 register \texttt{b8}.
+Then we perform fused multiply and add operation
+\texttt{d8{[}k{]}\ =\ a8\ *\ b*\ +\ d8{[}k{]}} for each of the 8 lanes
+while repeating this \texttt{MN} times in parallel. This code does a
+total of \$128MN + 64N\$ flops, since M is of the order of \texttt{1e5}
+we will ignore the \texttt{64N}. This gives us a total of \texttt{128MN}
+flops. Here is the snippet of the main code
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{\#pragma omp parallel for schedule(dynamic, 1)}
+\ControlFlowTok{for} \OperatorTok{(}\DataTypeTok{uint64\_t}\NormalTok{ i }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}\NormalTok{ i }\OperatorTok{\textless{}}\NormalTok{ M}\OperatorTok{;}\NormalTok{ i}\OperatorTok{++)} \OperatorTok{\{}
+
+\NormalTok{    \_\_m256 d8}\OperatorTok{[}\DecValTok{8}\OperatorTok{]} \OperatorTok{=} \OperatorTok{\{\};}
+    \ControlFlowTok{for}\OperatorTok{(}\DataTypeTok{int}\NormalTok{ k}\OperatorTok{=}\DecValTok{0}\OperatorTok{;}\NormalTok{ k}\OperatorTok{\textless{}}\DecValTok{8}\OperatorTok{;}\NormalTok{ k}\OperatorTok{++)} \OperatorTok{\{}
+        \CommentTok{// randomly initialize d8[k]}
+        \KeywordTok{alignas}\OperatorTok{(}\DecValTok{32}\OperatorTok{)} \DataTypeTok{float}\NormalTok{ v}\OperatorTok{[}\DecValTok{8}\OperatorTok{]} \OperatorTok{=} \OperatorTok{\{\};}
+        \ControlFlowTok{for} \OperatorTok{(}\DataTypeTok{int}\NormalTok{ j }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}\NormalTok{ j }\OperatorTok{\textless{}} \DecValTok{8}\OperatorTok{;}\NormalTok{ j}\OperatorTok{++)}\NormalTok{ v}\OperatorTok{[}\NormalTok{j}\OperatorTok{]} \OperatorTok{=}\NormalTok{ rand}\OperatorTok{()} \OperatorTok{/} \DataTypeTok{float}\OperatorTok{(}\NormalTok{RAND\_MAX}\OperatorTok{)} \OperatorTok{*} \FloatTok{2.0}\BuiltInTok{f} \OperatorTok{{-}} \FloatTok{1.0}\BuiltInTok{f}\OperatorTok{;}
+\NormalTok{        d8}\OperatorTok{[}\NormalTok{k}\OperatorTok{]} \OperatorTok{=}\NormalTok{ \_mm256\_load\_ps}\OperatorTok{(}\NormalTok{v}\OperatorTok{);}
+    \OperatorTok{\}}
+    \ControlFlowTok{for} \OperatorTok{(}\DataTypeTok{uint64\_t}\NormalTok{ j }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}\NormalTok{ j }\OperatorTok{\textless{}}\NormalTok{ N}\OperatorTok{;}\NormalTok{ j}\OperatorTok{++)} \OperatorTok{\{}
+        \PreprocessorTok{\#pragma unroll}
+        \ControlFlowTok{for}\OperatorTok{(}\DataTypeTok{int}\NormalTok{ k}\OperatorTok{=}\DecValTok{0}\OperatorTok{;}\NormalTok{ k}\OperatorTok{\textless{}}\DecValTok{8}\OperatorTok{;}\NormalTok{ k}\OperatorTok{++)} \OperatorTok{\{}
+\NormalTok{            d8}\OperatorTok{[}\NormalTok{k}\OperatorTok{]} \OperatorTok{=}\NormalTok{ \_mm256\_fmadd\_ps}\OperatorTok{(}\NormalTok{a8}\OperatorTok{,}\NormalTok{ b8}\OperatorTok{,}\NormalTok{ d8}\OperatorTok{[}\NormalTok{k}\OperatorTok{]);}
+        \OperatorTok{\}}
+    \OperatorTok{\}}
+
+    \CommentTok{// Since N is much larger the flops of this is negligible}
+\NormalTok{    \_\_m256 s }\OperatorTok{=}\NormalTok{ \_mm256\_setzero\_ps}\OperatorTok{();}
+    \ControlFlowTok{for}\OperatorTok{(}\DataTypeTok{int}\NormalTok{ i}\OperatorTok{=}\DecValTok{0}\OperatorTok{;}\NormalTok{ i}\OperatorTok{\textless{}}\DecValTok{8}\OperatorTok{;}\NormalTok{ i}\OperatorTok{++)} \OperatorTok{\{}
+\NormalTok{        s }\OperatorTok{=}\NormalTok{ \_mm256\_add\_ps}\OperatorTok{(}\NormalTok{s}\OperatorTok{,}\NormalTok{ d8}\OperatorTok{[}\NormalTok{i}\OperatorTok{]);}
+    \OperatorTok{\}}
+\NormalTok{    out}\OperatorTok{[}\NormalTok{i}\OperatorTok{]} \OperatorTok{+=}\NormalTok{ s}\OperatorTok{[}\DecValTok{0}\OperatorTok{];}
+\OperatorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+We time how long it takes to run this using
+\texttt{std::chrono::high\_resolution\_clock} and we will also measure
+the clock cycles during it's execution using \texttt{\_\_rdtscp}
+intrinsics this will help us get the measured clock freq. We take an
+average of 5 runs for reporting the wall clock time and the cpu cycles
+and thus the clock freq and the measured GSLOP/s. The entire code is at
+\href{./cpu_flops.cpp}{cpu\_flops.cpp}, we will run this with the
+following flags enabled
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\BuiltInTok{export} \VariableTok{OMP\_NUM\_THREADS}\OperatorTok{=}\NormalTok{24}
+
+\ExtensionTok{g++} \AttributeTok{{-}fopenmp} \AttributeTok{{-}g} \AttributeTok{{-}O3} \AttributeTok{{-}march}\OperatorTok{=}\NormalTok{native cpu\_flops.cc }\AttributeTok{{-}o}\NormalTok{ main}
+
+\ExtensionTok{perf}\NormalTok{ stat ./main}
+\end{Highlighting}
+\end{Shaded}
+
+Running it prints the following
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{Avg}\NormalTok{ Wall time        : 3.50322 s}
+\ExtensionTok{Total}\NormalTok{ FLOPs          : 6400 GFLOP}
+\ExtensionTok{Avg}\NormalTok{ Achieved FLOP    : 1826.89 GFLOP/s}
+\ExtensionTok{Cycles}\NormalTok{ elapsed       : 11972383729}
+\ExtensionTok{Measured}\NormalTok{ CPU freq    : 3.41753 GHz}
+\FunctionTok{sum}\NormalTok{                  : 2.05752}
+
+ \ExtensionTok{Performance}\NormalTok{ counter stats for }\StringTok{\textquotesingle{}./main\textquotesingle{}}\NormalTok{:}
+
+         \ExtensionTok{80,781.54}\NormalTok{ msec task{-}clock                }\CommentTok{\#   23.051 CPUs utilized          }
+             \ExtensionTok{2,372}\NormalTok{      context{-}switches          }\CommentTok{\#   29.363 /sec                   }
+               \ExtensionTok{159}\NormalTok{      cpu{-}migrations            }\CommentTok{\#    1.968 /sec                   }
+               \ExtensionTok{393}\NormalTok{      page{-}faults               }\CommentTok{\#    4.865 /sec                   }
+   \ExtensionTok{389,859,205,718}\NormalTok{      cycles                    }\CommentTok{\#    4.826 GHz                    }
+   \ExtensionTok{500,717,583,488}\NormalTok{      instructions              }\CommentTok{\#    1.28  insn per cycle         }
+    \ExtensionTok{50,156,378,434}\NormalTok{      branches                  }\CommentTok{\#  620.889 M/sec                  }
+         \ExtensionTok{1,403,191}\NormalTok{      branch{-}misses             }\CommentTok{\#    0.00\% of all branches        }
+
+       \ExtensionTok{3.504431292}\NormalTok{ seconds time elapsed}
+
+      \ExtensionTok{80.759760000}\NormalTok{ seconds user}
+       \ExtensionTok{0.023995000}\NormalTok{ seconds sys}
+\end{Highlighting}
+\end{Shaded}
+
+We also print the sum of output after the exectution so the compiler
+does not optimize away everything. The main things to see is we achieve
+1826.89 GFLOP/s and measured a clock freq of 4.826 GHz, there is also a
+huge difference between the clock frequencies measured by perf and
+\_\_rdtscp. The reason could be \_\_rdtscp does not vary according to
+the current core's frequency. Infact after reading more about it from
+\href{https://en.wikipedia.org/wiki/Time_Stamp_Counter}{Time\_Stamp\_Counter}
+I came to realize it's use is highly discouraged. We achieved 96.43\% of
+the theoretical peak flops. I think this is the practical best
+performance we can achieve as we never get the clock to run at turbo
+freq for all p and e core for all the avx256 instruction and there will
+be some dips in the clock freq degrading performance
+
+Only running the \href{./cpu_flops.cpp}{cpu\_flops.cpp} on the p cores
+using
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\BuiltInTok{export} \VariableTok{OMP\_NUM\_THREADS}\OperatorTok{=}\NormalTok{16}
+\BuiltInTok{export} \VariableTok{OMP\_PLACES}\OperatorTok{=}\StringTok{"\{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15\}"}
+\BuiltInTok{export} \VariableTok{OMP\_PROC\_BIND}\OperatorTok{=}\NormalTok{close}
+
+\ExtensionTok{g++} \AttributeTok{{-}fopenmp} \AttributeTok{{-}g} \AttributeTok{{-}O3} \AttributeTok{{-}march}\OperatorTok{=}\NormalTok{native cpu\_flops.cc }\AttributeTok{{-}o}\NormalTok{ main}
+
+\ExtensionTok{./main}
+\end{Highlighting}
+\end{Shaded}
+
+gives us
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{Avg}\NormalTok{ Wall time        : 4.79077 s}
+\ExtensionTok{Total}\NormalTok{ FLOPs          : 6400 GFLOP}
+\ExtensionTok{Avg}\NormalTok{ Achieved FLOP    : 1335.9 GFLOP/s}
+\ExtensionTok{Cycles}\NormalTok{ elapsed       : 16372601962}
+\ExtensionTok{Measured}\NormalTok{ CPU freq    : 3.41753 GHz}
+\FunctionTok{sum}\NormalTok{                  : 2.05752}
+\end{Highlighting}
+\end{Shaded}
+
+Thus the p cores can reach 99.93\% of their peak flops. while running it
+only on the e cores using
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\BuiltInTok{export} \VariableTok{OMP\_NUM\_THREADS}\OperatorTok{=}\NormalTok{8}
+\BuiltInTok{export} \VariableTok{OMP\_PLACES}\OperatorTok{=}\StringTok{"\{16,17,18,19,20,21,22,23\}"}
+\BuiltInTok{export} \VariableTok{OMP\_PROC\_BIND}\OperatorTok{=}\NormalTok{close}
+
+\ExtensionTok{g++} \AttributeTok{{-}fopenmp} \AttributeTok{{-}g} \AttributeTok{{-}O3} \AttributeTok{{-}march}\OperatorTok{=}\NormalTok{native cpu\_flops.cc }\AttributeTok{{-}o}\NormalTok{ main}
+
+\ExtensionTok{./main}
+\end{Highlighting}
+\end{Shaded}
+
+gives us
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{Avg}\NormalTok{ Wall time        : 11.9549 s}
+\ExtensionTok{Total}\NormalTok{ FLOPs          : 6400 GFLOP}
+\ExtensionTok{Avg}\NormalTok{ Achieved FLOP    : 535.346 GFLOP/s}
+\ExtensionTok{Cycles}\NormalTok{ elapsed       : 40856183393}
+\ExtensionTok{Measured}\NormalTok{ CPU freq    : 3.41753 GHz}
+\FunctionTok{sum}\NormalTok{                  : 2.05752}
+\end{Highlighting}
+\end{Shaded}
+
+which is also 99.50\% of the theoretical max that the e cores can
+achieve, I don't have any definite answers as to why only individually e
+cores and p cores are able to achieve max flops while together they fall
+short by 2-3\% but maybe they cannot be sustained at turbo freq all the
+time under avx256
+
+Looking at generated assembly code from
+\href{./cpu_flops.s}{cpu\_flops.s} we see that the compiler has
+generated the 8 fma256 instruction for us
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{.L4:}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm2}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm9}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm8}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm7}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm6}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm5}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm4}
+\NormalTok{    vfmadd231ps \%ymm0, \%ymm1, \%ymm3}
+\NormalTok{    subq    $1, \%rax}
+\NormalTok{    jne .L4}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{comparison-with-cp3b-solution}{%
+\subsection{Comparison with CP3B
+Solution}\label{comparison-with-cp3b-solution}}
+
+For comparison with my fastest cp3b solution, we use the exact same code
+as the
+\href{https://ppc-exercises.cs.aalto.fi/course/aalto2025/cp/cp3b/137707}{137707}
+submission with replacing the avx512 instructions with avx256 and adding
+code for timing measurements and clock freq measurements. We set nx and
+ny to be 14000. On running
+
+\begin{verbatim}
+export OMP_NUM_THREADS=24
+
+g++ -fopenmp -g -O3 -march=native cp3b.cc -o main
+
+perf stat ./main
+\end{verbatim}
+
+we see the following output
+
+\begin{verbatim}
+Wall time            : 1.73274 s
+Total FLOPs          : 2744 GFLOP
+Achieved FLOPS       : 1583.62 GFLOP/s
+Cycles elapsed       : 5921721988
+Measured CPU freq    : 3.41756 GHz
+Checksum             : -0.00906668
+
+ Performance counter stats for './main':
+
+         45,399.47 msec task-clock                #   11.634 CPUs utilized          
+               689      context-switches          #   15.176 /sec                   
+                25      cpu-migrations            #    0.551 /sec                   
+           683,659      page-faults               #   15.059 K/sec                  
+   206,358,697,147      cycles                    #    4.545 GHz                    
+   386,717,416,506      instructions              #    1.87  insn per cycle         
+    15,785,912,832      branches                  #  347.711 M/sec                  
+        62,951,893      branch-misses             #    0.40% of all branches        
+
+       3.902154516 seconds time elapsed
+
+      44.625873000 seconds user
+       0.776241000 seconds sys
+\end{verbatim}
+
+We achieved 83.59\% of the theoretical peak flops
+
+Now again inspecting the assembly at \href{./cp3b.s}{cp3b.s} we see the
+compiler did the right thing and generated the vectorized code for us.
+The assembly code for the innermost loop of the kernel looks like this
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{.L115:}
+\NormalTok{    vmovaps (\%r8), \%ymm1}
+\NormalTok{    vbroadcastss    (\%rdx), \%ymm2}
+\NormalTok{    addq    $32, \%rdx}
+\NormalTok{    vmovaps (\%r8,\%rcx,4), \%ymm0}
+\NormalTok{    addq    $32, \%r8}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm1, \%ymm4}
+\NormalTok{    vfmadd213ps 192(\%rsp), \%ymm0, \%ymm2}
+\NormalTok{    vmovaps \%ymm2, 192(\%rsp)}
+\NormalTok{    vbroadcastss    {-}28(\%rdx), \%ymm2}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm1, \%ymm9}
+\NormalTok{    vfmadd213ps 128(\%rsp), \%ymm0, \%ymm2}
+\NormalTok{    vmovaps \%ymm2, 128(\%rsp)}
+\NormalTok{    vbroadcastss    {-}24(\%rdx), \%ymm2}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm1, \%ymm8}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm0, \%ymm15}
+\NormalTok{    vbroadcastss    {-}20(\%rdx), \%ymm2}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm1, \%ymm7}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm0, \%ymm11}
+\NormalTok{    vbroadcastss    {-}16(\%rdx), \%ymm2}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm1, \%ymm6}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm0, \%ymm10}
+\NormalTok{    vbroadcastss    {-}12(\%rdx), \%ymm2}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm1, \%ymm5}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm0, \%ymm14}
+\NormalTok{    vbroadcastss    {-}8(\%rdx), \%ymm2}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm1, \%ymm3}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm0, \%ymm13}
+\NormalTok{    vbroadcastss    {-}4(\%rdx), \%ymm2}
+\NormalTok{    vfmadd213ps 160(\%rsp), \%ymm2, \%ymm1}
+\NormalTok{    vfmadd231ps \%ymm2, \%ymm0, \%ymm12}
+\NormalTok{    vmovaps \%ymm1, 160(\%rsp)}
+\NormalTok{    cmpq    \%rsi, \%rdx}
+\NormalTok{    jne .L115}
+\end{Highlighting}
+\end{Shaded}
+
+There are 2 instructions for loop counters, 2 for pointer arithematic, 8
+for memory access, 8 for the boradcast operation and 16 for the actual
+fma operations
+
+\hypertarget{analysis-of-the-gpu}{%
+\section{Analysis of the GPU}\label{analysis-of-the-gpu}}
+
+\hypertarget{theoretical-limitations-of-gpu}{%
+\subsection{Theoretical limitations of
+GPU}\label{theoretical-limitations-of-gpu}}
+
+For the GPU running
+\texttt{nvcc\ device\_query.cpp\ -o\ main\ \&\&\ ./main} gives
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{Name:}\NormalTok{ NVIDIA GeForce RTX 2050}
+\ExtensionTok{Compute}\NormalTok{ Capability: 8.6}
+\ExtensionTok{Clock}\NormalTok{ Rate: 1.155 GHz }
+\ExtensionTok{Max}\NormalTok{ threads per block: 1024}
+\ExtensionTok{Max}\NormalTok{ threads per multiprocessor: 1536}
+\ExtensionTok{Threads}\NormalTok{ per warp: 32}
+\ExtensionTok{Max}\NormalTok{ registers per block: 65536}
+\ExtensionTok{Max}\NormalTok{ registers per multiprocessor: 65536}
+\ExtensionTok{Total}\NormalTok{ global memory: 3897 MB}
+\ExtensionTok{Max}\NormalTok{ shared mem per block: 48 KB}
+\ExtensionTok{Shared}\NormalTok{ mem per multiprocessor: 102400 B}
+\ExtensionTok{Multiprocessor}\NormalTok{ count: 16}
+\ExtensionTok{Max}\NormalTok{ warps per multiprocessor: 48}
+\end{Highlighting}
+\end{Shaded}
+
+Thus we have the Nvidia GeForce RTX 2050 as our GPU for this analysis
+which is based on turing architecture. It has 16 streaming
+multiprocessors (SM) and from the wiki of
+\href{https://en.wikipedia.org/wiki/GeForce_RTX_20_series\#Laptop}{GeForce
+RTX 2050} it has 2048 CUDA cores and 64 Tensor Cores. It also has a
+bandwidth of 112 GB/s and a default clock freq of 1.155 GHz and boost of
+1.477 GHz. Each core can execute 1 fma i.e 2 FLOP per cycle, we can then
+calculate the theoretical max flops as follows
+
+\[
+\begin{aligned}
+\text{SP peak @ base} 
+&= 2048 \times 2 \times 1.155\!\times\!10^9 
+\approx 4730.88\;\mathrm{GFLOP/s}\\
+\text{SP peak @ boost} 
+&= 2048 \times 2 \times 1.477\!\times\!10^9 
+\approx 6049.79\;\mathrm{GFLOP/s}
+\end{aligned}
+\]
+
+This matches with the processing power @ boost in the wiki of GeForce
+2050
+
+{[}1{]} -
+\href{https://www.techpowerup.com/gpu-specs/geforce-rtx-2050-mobile.c3859}{Nvidia
+GeForce RTX datasheet}
+
+{[}2{]} -
+\href{https://www.nvidia.com/fi-fi/geforce/gaming-laptops/compare-20-series/}{RTX
+Series comparison}
+
+\hypertarget{practical-limitations-of-gpu}{%
+\subsection{Practical limitations of
+GPU}\label{practical-limitations-of-gpu}}
+
+For doing max computation on gpu we will let each thread execute \(N\)
+fma i.e each thread will compute \(a = a *b + a\). Each thread then does
+a total of \(2 * N\) flops which will allow the entire kernel to do
+blocks * threads * 2 * N flops. Here is our very simple and tiny kernel,
+the entire code is available at \url{max_flops.cu}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\AttributeTok{extern} \StringTok{"C"}\NormalTok{ \_\_global\_\_}
+\DataTypeTok{void}\NormalTok{ gpu\_kernel}\OperatorTok{(}
+    \DataTypeTok{float} \OperatorTok{*}\NormalTok{out}\OperatorTok{,}
+    \DataTypeTok{int}\NormalTok{ N}\OperatorTok{,} \DataTypeTok{float}\NormalTok{ seed}
+\OperatorTok{)} \OperatorTok{\{}
+
+    \DataTypeTok{int}\NormalTok{ tid }\OperatorTok{=}\NormalTok{ threadIdx}\OperatorTok{.}\NormalTok{x}\OperatorTok{;}
+    \DataTypeTok{float}\NormalTok{ a }\OperatorTok{=}\NormalTok{ seed }\OperatorTok{+}\NormalTok{ tid}\OperatorTok{;}
+    \DataTypeTok{float}\NormalTok{ b }\OperatorTok{=}\NormalTok{ seed }\OperatorTok{{-}}\NormalTok{ tid}\OperatorTok{;}
+
+    \ControlFlowTok{for} \OperatorTok{(}\DataTypeTok{int}\NormalTok{ i }\OperatorTok{=} \DecValTok{0}\OperatorTok{;}\NormalTok{ i }\OperatorTok{\textless{}}\NormalTok{ N}\OperatorTok{;}\NormalTok{ i}\OperatorTok{++)} \OperatorTok{\{}
+\NormalTok{        a }\OperatorTok{=}\NormalTok{ a }\OperatorTok{*}\NormalTok{ b }\OperatorTok{+}\NormalTok{ a}\OperatorTok{;}
+    \OperatorTok{\}}
+
+\NormalTok{    out}\OperatorTok{[}\NormalTok{blockIdx}\OperatorTok{.}\NormalTok{x }\OperatorTok{*}\NormalTok{ blockDim}\OperatorTok{.}\NormalTok{x }\OperatorTok{+}\NormalTok{ tid}\OperatorTok{]} \OperatorTok{=}\NormalTok{ a}\OperatorTok{;}
+\OperatorTok{\}}
+
+\NormalTok{gpu\_kernel}\OperatorTok{\textless{}\textless{}\textless{}}\DecValTok{1024}\OperatorTok{,} \DecValTok{256}\OperatorTok{\textgreater{}\textgreater{}\textgreater{}(}
+\NormalTok{    d\_out}\OperatorTok{,}\NormalTok{ iters}\OperatorTok{,}\NormalTok{ seed}
+\OperatorTok{);}
+\end{Highlighting}
+\end{Shaded}
+
+We run this with
+\texttt{nvcc\ max\_flops.cu\ -O3\ -arch=sm\_86\ -o\ main\ \&\&\ ./main}
+with N set to \texttt{1e7} and it gives the following output
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{Elapsed}\NormalTok{ Time : 1132.182 ms }\ErrorTok{(}\ExtensionTok{1.132}\NormalTok{ s}\KeywordTok{)}
+ \ExtensionTok{Total}\NormalTok{ FLOP  : 5.243e+03 GFLOP}
+\ExtensionTok{Performance}\NormalTok{  : 4630.773 GFLOP/s}
+\end{Highlighting}
+\end{Shaded}
+
+We thus achieve 97.88\% of the theoretical maximum flops. Profiling it
+with \texttt{sudo\ ncu\ ./main} gives us
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{gpu\_kernel} \ErrorTok{(}\ExtensionTok{1024,}\NormalTok{ 1, 1}\KeywordTok{)}\ExtensionTok{x}\ErrorTok{(}\ExtensionTok{256,}\NormalTok{ 1, 1}\KeywordTok{)}\ExtensionTok{,}\NormalTok{ Context 1, Stream 7, Device 0, CC 8.6}
+    \ExtensionTok{Section:}\NormalTok{ GPU Speed Of Light Throughput}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Metric}\NormalTok{ Name               Metric Unit     Metric Value}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{DRAM}\NormalTok{ Frequency          cycle/nsecond             6.00}
+    \ExtensionTok{SM}\NormalTok{ Frequency            cycle/usecond           832.57}
+    \ExtensionTok{Elapsed}\NormalTok{ Cycles                  cycle    1,532,524,284}
+    \ExtensionTok{Memory}\NormalTok{ Throughput                   \%             0.06}
+    \ExtensionTok{DRAM}\NormalTok{ Throughput                     \%             0.00}
+    \ExtensionTok{Duration}\NormalTok{                       second             1.13}
+    \ExtensionTok{L1/TEX}\NormalTok{ Cache Throughput             \%             0.00}
+    \ExtensionTok{L2}\NormalTok{ Cache Throughput                 \%             0.06}
+    \ExtensionTok{SM}\NormalTok{ Active Cycles                cycle 1,532,183,860.38}
+    \ExtensionTok{Compute} \ErrorTok{(}\ExtensionTok{SM}\KeywordTok{)} \ExtensionTok{Throughput}\NormalTok{             \%            99.18}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+
+    \ExtensionTok{INF}\NormalTok{   The kernel is utilizing greater than 80.0\% of the available compute or memory performance of the device. To   }
+          \ExtensionTok{further}\NormalTok{ improve performance, work will likely need to be shifted from the most utilized to another unit.      }
+          \ExtensionTok{Start}\NormalTok{ by analyzing workloads in the Compute Workload Analysis section.                                        }
+
+    \ExtensionTok{Section:}\NormalTok{ Launch Statistics}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Metric}\NormalTok{ Name                          Metric Unit    Metric Value}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Block}\NormalTok{ Size                                                   256}
+    \ExtensionTok{Function}\NormalTok{ Cache Configuration                     CachePreferNone}
+    \ExtensionTok{Grid}\NormalTok{ Size                                                  1,024}
+    \ExtensionTok{Registers}\NormalTok{ Per Thread             register/thread              16}
+    \ExtensionTok{Shared}\NormalTok{ Memory Configuration Size           Kbyte            8.19}
+    \ExtensionTok{Driver}\NormalTok{ Shared Memory Per Block       Kbyte/block            1.02}
+    \ExtensionTok{Dynamic}\NormalTok{ Shared Memory Per Block       byte/block               0}
+    \ExtensionTok{Static}\NormalTok{ Shared Memory Per Block        byte/block               0}
+    \ExtensionTok{Threads}\NormalTok{                                   thread         262,144}
+    \ExtensionTok{Waves}\NormalTok{ Per SM                                               10.67}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+
+    \ExtensionTok{Section:}\NormalTok{ Occupancy}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Metric}\NormalTok{ Name                     Metric Unit Metric Value}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Block}\NormalTok{ Limit SM                        block           16}
+    \ExtensionTok{Block}\NormalTok{ Limit Registers                 block           16}
+    \ExtensionTok{Block}\NormalTok{ Limit Shared Mem                block            8}
+    \ExtensionTok{Block}\NormalTok{ Limit Warps                     block            6}
+    \ExtensionTok{Theoretical}\NormalTok{ Active Warps per SM        warp           48}
+    \ExtensionTok{Theoretical}\NormalTok{ Occupancy                     \%          100}
+    \ExtensionTok{Achieved}\NormalTok{ Occupancy                        \%        95.84}
+    \ExtensionTok{Achieved}\NormalTok{ Active Warps Per SM           warp        46.00}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+
+    \ExtensionTok{INF}\NormalTok{   This kernel}\StringTok{\textquotesingle{}s theoretical occupancy is not impacted by any block limit.          }
+\end{Highlighting}
+\end{Shaded}
+
+We can see that our kernel achieved a compute capacity of
+\texttt{99.18\%} which is all thanks to \textasciitilde0\% memory
+utilization. We also achieved 95.84\% of max occupancy with 46 active
+warps out of 48
+
+Looking at the ptx code with
+\texttt{nvcc\ -\/-ptx\ -arch=sm\_86\ max\_flops.cu\ -o\ main.ptx} we see
+that the compiler directly generated fma f32 instructions while
+unrolling the inner loop by 4 for us
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{$L\_\_BB0\_3:}
+\NormalTok{    fma.rn.f32  \%f13, \%f2, \%f20, \%f20;}
+\NormalTok{    fma.rn.f32  \%f14, \%f2, \%f13, \%f13;}
+\NormalTok{    fma.rn.f32  \%f15, \%f2, \%f14, \%f14;}
+\NormalTok{    fma.rn.f32  \%f20, \%f2, \%f15, \%f15;}
+\NormalTok{    add.s32     \%r13, \%r13, {-}4;}
+\NormalTok{    setp.ne.s32     \%p3, \%r13, 0;}
+\NormalTok{    @\%p3 bra    $L\_\_BB0\_3;}
+\end{Highlighting}
+\end{Shaded}
+
+The executable can be found at \url{max_flops} and the ptx code at
+\url{max_flops.ptx}
+
+\hypertarget{comparison-with-cp5-solution}{%
+\subsection{Comparison with CP5
+Solution}\label{comparison-with-cp5-solution}}
+
+Now for comparison with the fastest \url{cp5.cu} solution we again
+benchmark using
+\texttt{nvcc\ cp5.cu\ -O3\ -arch=sm\_86\ -o\ main\ \&\&\ ./main}. It
+follows the exact same code as submitted to cp5 without any modification
+and nx and ny set to \texttt{14000}, the executable can be found at
+\url{cp5}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Elapsed Time }\OperatorTok{:} \FloatTok{1050.230}\NormalTok{ ms }\OperatorTok{(}\FloatTok{1.050}\NormalTok{ s}\OperatorTok{)}
+\NormalTok{ Total FLOP  }\OperatorTok{:} \FloatTok{2.744e+03}\NormalTok{ GFLOP}
+\NormalTok{Performance  }\OperatorTok{:} \FloatTok{2612.948}\NormalTok{ GFLOP}\OperatorTok{/}\NormalTok{s}
+\end{Highlighting}
+\end{Shaded}
+
+It executated \(2\times 14\times 14\times 14 / 2= 2744\) GFLOP (as we
+are only computing the upper triangular matrix) in 1.050s achieving
+2612.948 GFLOP/s which is 55.23\% of the theoretical peak flops @ base.
+Profiling it with \texttt{sudo\ ncu\ ./main} reveals
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{matmul\_kernel\_v3} \ErrorTok{(}\ExtensionTok{110,}\NormalTok{ 110, 1}\KeywordTok{)}\ExtensionTok{x}\ErrorTok{(}\ExtensionTok{16,}\NormalTok{ 16, 1}\KeywordTok{)}\ExtensionTok{,}\NormalTok{ Context 1, Stream 7, Device 0, CC 8.6}
+    \ExtensionTok{Section:}\NormalTok{ GPU Speed Of Light Throughput}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Metric}\NormalTok{ Name               Metric Unit     Metric Value}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{DRAM}\NormalTok{ Frequency          cycle/nsecond             6.00}
+    \ExtensionTok{SM}\NormalTok{ Frequency            cycle/usecond           832.53}
+    \ExtensionTok{Elapsed}\NormalTok{ Cycles                  cycle    1,069,374,085}
+    \ExtensionTok{Memory}\NormalTok{ Throughput                   \%            56.61}
+    \ExtensionTok{DRAM}\NormalTok{ Throughput                     \%            54.71}
+    \ExtensionTok{Duration}\NormalTok{                       second             1.28}
+    \ExtensionTok{L1/TEX}\NormalTok{ Cache Throughput             \%            56.73}
+    \ExtensionTok{L2}\NormalTok{ Cache Throughput                 \%            33.48}
+    \ExtensionTok{SM}\NormalTok{ Active Cycles                cycle 1,067,132,546.81}
+    \ExtensionTok{Compute} \ErrorTok{(}\ExtensionTok{SM}\KeywordTok{)} \ExtensionTok{Throughput}\NormalTok{             \%            69.46}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+
+    \ExtensionTok{WRN}\NormalTok{   Compute is more heavily utilized than Memory: Look at the Compute Workload Analysis section to see what the   }
+          \ExtensionTok{compute}\NormalTok{ pipelines are spending their time doing. Also, consider whether any computation is redundant and      }
+          \ExtensionTok{could}\NormalTok{ be reduced or moved to look{-}up tables.                                                                  }
+
+    \ExtensionTok{Section:}\NormalTok{ Launch Statistics}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Metric}\NormalTok{ Name                          Metric Unit    Metric Value}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Block}\NormalTok{ Size                                                   256}
+    \ExtensionTok{Function}\NormalTok{ Cache Configuration                     CachePreferNone}
+    \ExtensionTok{Grid}\NormalTok{ Size                                                 12,100}
+    \ExtensionTok{Registers}\NormalTok{ Per Thread             register/thread             100}
+    \ExtensionTok{Shared}\NormalTok{ Memory Configuration Size           Kbyte           65.54}
+    \ExtensionTok{Driver}\NormalTok{ Shared Memory Per Block       Kbyte/block            1.02}
+    \ExtensionTok{Dynamic}\NormalTok{ Shared Memory Per Block       byte/block               0}
+    \ExtensionTok{Static}\NormalTok{ Shared Memory Per Block       Kbyte/block            8.19}
+    \ExtensionTok{Threads}\NormalTok{                                   thread       3,097,600}
+    \ExtensionTok{Waves}\NormalTok{ Per SM                                              378.12}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+
+    \ExtensionTok{Section:}\NormalTok{ Occupancy}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Metric}\NormalTok{ Name                     Metric Unit Metric Value}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+    \ExtensionTok{Block}\NormalTok{ Limit SM                        block           16}
+    \ExtensionTok{Block}\NormalTok{ Limit Registers                 block            2}
+    \ExtensionTok{Block}\NormalTok{ Limit Shared Mem                block            7}
+    \ExtensionTok{Block}\NormalTok{ Limit Warps                     block            6}
+    \ExtensionTok{Theoretical}\NormalTok{ Active Warps per SM        warp           16}
+    \ExtensionTok{Theoretical}\NormalTok{ Occupancy                     \%        33.33}
+    \ExtensionTok{Achieved}\NormalTok{ Occupancy                        \%        33.30}
+    \ExtensionTok{Achieved}\NormalTok{ Active Warps Per SM           warp        15.98}
+    \ExtensionTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}} \AttributeTok{{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}
+
+    \ExtensionTok{WRN}\NormalTok{   This kernel}\StringTok{\textquotesingle{}s theoretical occupancy (33.3\%) is limited by the number of required registers. See the CUDA Best }
+\StringTok{          Practices Guide (https://docs.nvidia.com/cuda/cuda{-}c{-}best{-}practices{-}guide/index.html\#occupancy) for more      }
+\StringTok{          details on optimizing occupancy.                                                                   }
+\end{Highlighting}
+\end{Shaded}
+
+This time we achieved 70\% of max compute throughput and only 33\% max
+theoretical occupancy which is due to high register use of 100 per
+thread and 16 active warps per block possible and also our memory
+throughput is 55\% of peak. Thus we are register bound
+
+Looking at the ptx code from \url{cp5.ptx} we see that the compiler
+issues vectorized loads from shared memory this time
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{    fma.rn.f32  \%f701, \%f636, \%f617, \%f605;}
+\NormalTok{    fma.rn.f32  \%f702, \%f636, \%f618, \%f606;}
+\NormalTok{    fma.rn.f32  \%f703, \%f636, \%f619, \%f607;}
+\NormalTok{    fma.rn.f32  \%f704, \%f636, \%f620, \%f608;}
+\NormalTok{    ld.shared.v4.f32    \{\%f705, \%f706, \%f707, \%f708\}, [\%r74+2048];}
+\NormalTok{    ld.shared.v4.f32    \{\%f713, \%f714, \%f715, \%f716\}, [\%r74+2304];}
+\NormalTok{    ld.shared.v4.f32    \{\%f721, \%f722, \%f723, \%f724\}, [\%r77+2048];}
+\NormalTok{    ld.shared.v4.f32    \{\%f729, \%f730, \%f731, \%f732\}, [\%r77+2304];}
+\NormalTok{    fma.rn.f32  \%f737, \%f721, \%f705, \%f641;}
+\NormalTok{    fma.rn.f32  \%f738, \%f721, \%f706, \%f642;}
+\NormalTok{    fma.rn.f32  \%f739, \%f721, \%f707, \%f643;}
+\end{Highlighting}
+\end{Shaded}
+
+not only that we can also see that the compiler also generated code for
+vectorized load from global to shared memory
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{$L\_\_BB1\_3:}
+\NormalTok{    .loc    1 108 9}
+\NormalTok{    ld.global.nc.v4.u32     \{\%r56, \%r57, \%r58, \%r59\}, [\%rd39];}
+\NormalTok{    st.shared.v4.u32    [\%r6], \{\%r56, \%r57, \%r58, \%r59\};}
+\NormalTok{    .loc    1 109 9}
+\NormalTok{    ld.global.nc.v4.u32     \{\%r64, \%r65, \%r66, \%r67\}, [\%rd38];}
+\NormalTok{    st.shared.v4.u32    [\%r5], \{\%r64, \%r65, \%r66, \%r67\};}
+\end{Highlighting}
+\end{Shaded}

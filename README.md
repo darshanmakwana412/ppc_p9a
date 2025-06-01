@@ -9,6 +9,8 @@
 	- [Practical limitations of GPU](#practical-limitations-of-gpu)
 	- [Comparison with CP5 Solution](#comparison-with-cp5-solution)
 
+The [README.md](./README.md) and [report.pdf](./report.pdf) are exactly the same infact to generate the report the readme was converted to tex using pandoc. So prefer reading the markdown
+
 # Analysis of the CPU
 
 ## Theoretical limitations of CPU
@@ -171,7 +173,7 @@ Measured CPU freq    : 3.41753 GHz
 sum                  : 2.05752
 ```
 
-which is also 99.50% of the theoretical max that the e cores can achieve, I don't have any definite answers as to why only individually e cores and p cores are able to achieve max flops while together they fall short 2-3%
+which is also 99.50% of the theoretical max that the e cores can achieve, I don't have any definite answers as to why only individually e cores and p cores are able to achieve max flops while together they fall short by 2-3% but maybe they cannot be sustained at turbo freq all the time under avx256
 
 Looking at generated assembly code from [cpu\_flops.s](./cpu_flops.s) we see that the compiler has generated the 8 fma256 instruction for us
 
@@ -230,7 +232,7 @@ Checksum             : -0.00906668
 
 We achieved 83.59% of the theoretical peak flops
 
-Now again inspecting the assembly at [cp3b.s](./cp3b.s) we see the compiler did the right thing the generated the vectorized code for us
+Now again inspecting the assembly at [cp3b.s](./cp3b.s) we see the compiler did the right thing and generated the vectorized code for us. The assembly code for the innermost loop of the kernel looks like this
 
 ```assembly
 .L115:
@@ -268,6 +270,7 @@ Now again inspecting the assembly at [cp3b.s](./cp3b.s) we see the compiler did 
 	cmpq	%rsi, %rdx
 	jne	.L115
 ```
+There are 2 instructions for loop counters, 2 for pointer arithematic, 8 for memory access, 8 for the boradcast operation and 16 for the actual fma operations
 
 # Analysis of the GPU
 
