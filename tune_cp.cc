@@ -14,9 +14,9 @@ constexpr int MR = 8;
 constexpr int NR = 16;
 // for cache blocks
 // MC and NC have to be multiple of NUM_LOADS
-constexpr int MC = 256; // Load ndata[ic: ic + MC][:] in L3 cache block
-constexpr int KC = 224;
-constexpr int NC = 128;
+constexpr int MC = 992; // Load ndata[ic: ic + MC][:] in L3 cache block
+constexpr int KC = 1008;
+constexpr int NC = 992;
 
 constexpr int Px = 1;
 constexpr int Py = 32;

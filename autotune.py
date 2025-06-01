@@ -26,9 +26,9 @@ with output_csv.open("w", newline="") as csvfile:
             tune_path = Path(f"tune_cp.cc")
             tune_path.write_text(code)
 
-            result = subprocess.run(["./grading", "benchmark", "--remote", "--file", str(tune_path)], capture_output=True, text=True)
-            m = re.search(r"Avg Achieved FLOP    : ([\d.]+) GFLOP/s", result.stdout)
-            wall_time = float(m.group(1)) if m else float("inf")
+            result = subprocess.run(["bash", "run_cpu.sh", str(tune_path)], capture_output=True, text=True)
+            m = re.search(r"Achieved FLOPS       : ([\d.]+) GFLOP/s", result.stdout)
+            gflops = float(m.group(1)) if m else float("inf")
 
-            print(f"MC={MC}, NC={MC}, KC={KC} → {wall_time:.3f}s")
-            writer.writerow([MC, MC, KC, wall_time])
+            print(f"MC={MC}, NC={MC}, KC={KC} → {gflops:.3f}s")
+            writer.writerow([MC, MC, KC, gflops])

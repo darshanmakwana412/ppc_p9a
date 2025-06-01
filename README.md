@@ -53,6 +53,8 @@ For each e core we achieve 16 flops/cycle and thus we can achieve at max 8 × 16
 
 Total we can achieve a max flops of 1894.4 GFLOP/s
 
+Doing a similar analysis for double precision the number of doubles we can fit in avx256 would be effectively halved and we can fidn the theoretical maximum flops for doubles to be around 947.2 GFLOP/s
+
 \[1] - [13th Gen Intel (R) Core(TM) i7-13700K](https://www.intel.com/content/www/us/en/products/sku/230500/intel-core-i713700k-processor-30m-cache-up-to-5-40-ghz/specifications.html)
 
 \[2] - [Default clock freq of i7-13700K](https://www.techpowerup.com/cpu-specs/core-i7-13700k.c2850)
@@ -271,6 +273,11 @@ Now again inspecting the assembly at [cp3b.s](./cp3b.s) we see the compiler did 
 	jne	.L115
 ```
 There are 2 instructions for loop counters, 2 for pointer arithematic, 8 for memory access, 8 for the boradcast operation and 16 for the actual fma operations
+
+When on experimentation with different tile sizes we find that a tile size of Mc=Nc=96 and Kc=560 gives us 1690.02 GFLOP/s, which is 89.92% of the theoretical peak flops and 6% increase from the untuned matmul kernel, plot the heatmap of tile size along x and y shows a pattern that when one a tile can fit in the L2 cache (MC * KC  * 4 bytes per float<= 24MB/10 (we have 10 instances)) we get high performance but as soon as the tile exceeds the per core L2 the performance starts degrading significantly
+![tile_size_heatmap](./tile_size_gflops.png)
+
+The data from tuning is at [tuning_results.csv](./tuning_results.csv) and the python script for generating the benchmarks and plotting are at [autotune.py](./autotune.py) and [plot_heatmap.py](./plot_heatmap.py)
 
 # Analysis of the GPU
 
