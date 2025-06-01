@@ -1,4 +1,4 @@
-## Theoretical limitations
+## Theoretical limitations of CPU
 
 For the cpu running `lscpu` gives
 ```bash
@@ -31,11 +31,11 @@ NUMA:
 ```
 It shows that the cpu is 13th Gen Intel(R) Core(TM) i7-13700K and has 16 cores and 24 threads, looking more into the [intel doc](https://www.intel.com/content/www/us/en/products/sku/230500/intel-core-i713700k-processor-30m-cache-up-to-5-40-ghz/specifications.html) of i7-13700K it has 8 performant cores (with hyper threading of 2) and 8 efficient cores. For the P-cores it has a base frequency of 3.4GHz and turbo frequency of 5.3 GHz while for the E-cores it has a base frequency of 2.5GHz and turbo frequency of 4.2GHz
 
-The i7-13700K operates at a default frequency of [3.4GHz](https://www.techpowerup.com/cpu-specs/core-i7-13700k.c2850). Since it supports avx2 and each p cores can do 2 inst/cycle on ports 0 and 1 we can achieve 2 * 8 (8 sp per 256bit vector) * 2 (2 flops per fma) = 32 flops/cycle. For 8 p cores we can achieve at max 8 * 32 * 3.4 GHz = 870.4 GFLOP/s
+The i7-13700K operates at a default frequency of [3.4GHz](https://www.techpowerup.com/cpu-specs/core-i7-13700k.c2850). Since it supports avx2 and each p cores can do 2 inst/cycle on ports 0 and 1 we can achieve 2 * 8 (8 sp per 256bit vector) * 2 (2 flops per fma) = 32 flops/cycle. For 8 p cores we can achieve at max 8 * 32 * 5.3 GHz = 1356.8 GFLOP/s at turbo frequency
 
-For each e core we achieve 16 flops/cycle and thus we can achieve at max 8 * 16 * 3.4 GHz = 435.2 GFLOP/s
+For each e core we achieve 16 flops/cycle and thus we can achieve at max 8 * 16 * 4.2 GHz = 537.6 GFLOP/s at turbo frequency
 
-Total we can achieve a max flops of 1305.6 GFLOP/s
+Total we can achieve a max flops of 1894.4 GFLOP/s
 
 [1] - [13th Gen Intel (R) Core(TM) i7-13700K](https://www.intel.com/content/www/us/en/products/sku/230500/intel-core-i713700k-processor-30m-cache-up-to-5-40-ghz/specifications.html)
 
@@ -43,16 +43,22 @@ Total we can achieve a max flops of 1305.6 GFLOP/s
 
 ## Practical limitations of CPU
 
-For evaluating the practical limitations of the cpu we will initialize a vector `a` of size 8 into an avx256 rigister and then mutiply it with a scalar `b` broadcasted to also avx256 and add it back to itself. We will do this many times in parallel and in loop. The main part of the code is very straight forward and simple we do $a[k] = a[k] \times b + a[k], \forall k\in [8]$ $8MN$ times. This code does a total of $64MN + 64N$ flops, since M is of the order of `1e5` we will ignore the `64N`. This gives us a total of `64MN` flops. Here is the snippet of the code
+For evaluating the practical limitations of the cpu we will load an 8 element vector `a` into an avx256 register `a8` and broadcast a scalar `b` into another avx256 register `b8`. Then we perform fused multiply and add operation `d8[k] = a8 * b* + d8[k]` for each of the 8 lanes while repeating this `MN` times in parallel. This code does a total of $128MN + 64N$ flops, since M is of the order of `1e5` we will ignore the `64N`. This gives us a total of `128MN` flops. Here is the snippet of the main code
 ```cpp
 #pragma omp parallel for schedule(dynamic, 1)
-for (int i = 0; i < M; i++) {
+for (uint64_t i = 0; i < M; i++) {
 
     __m256 d8[8] = {};
-    for (int j = 0; j < N; j++) {
+    for(int k=0; k<8; k++) {
+        // randomly initialize d8[k]
+        alignas(32) float v[8] = {};
+        for (int j = 0; j < 8; j++) v[j] = rand() / float(RAND_MAX) * 2.0f - 1.0f;
+        d8[k] = _mm256_load_ps(v);
+    }
+    for (uint64_t j = 0; j < N; j++) {
         #pragma unroll
-        for(int i=0; i<8; i++) {
-            d8[i] = _mm256_fmadd_ps(a8, b8, d8[i]);
+        for(int k=0; k<8; k++) {
+            d8[k] = _mm256_fmadd_ps(a8, b8, d8[k]);
         }
     }
 
@@ -61,37 +67,45 @@ for (int i = 0; i < M; i++) {
     for(int i=0; i<8; i++) {
         s = _mm256_add_ps(s, d8[i]);
     }
-    out[i] = s[0];
+    out[i] += s[0];
 }
 ```
 
-We time how long it takes to run this using `std::chrono::high_resolution_clock` and we will also measure the clock cycles during it's execution using `__rdtscp` intrinsics this will help us get the measured clock freq. We take an average of 5 runs for reporting the wall clock time and the cpu cycles. The entire code is at [cpu_flops.cpp](./cpu_flops.cpp) we will run this with aggressive auto vectorization and loop unrolling. [run_cpu.sh](./run_cpu.sh) is a small bash script which runs this code here are the flags that are enabled in it
-
+We time how long it takes to run this using `std::chrono::high_resolution_clock` and we will also measure the clock cycles during it's execution using `__rdtscp` intrinsics this will help us get the measured clock freq. We take an average of 5 runs for reporting the wall clock time and the cpu cycles and thus the clock freq and the measured GSLOP/s. The entire code is at [cpu_flops.cpp](./cpu_flops.cpp), we will run this with the following flags enabled
 ```bash
-Wall time            : 3.84917 s
+export OMP_NUM_THREADS=24
+
+g++ -fopenmp -g -O3 -march=native cpu_flops.cc -o main
+
+perf stat ./main
+```
+
+Running it prints the following
+```bash
+Avg Wall time        : 3.50322 s
 Total FLOPs          : 6400 GFLOP
-Achieved FLOPS       : 1662.7 GFLOP/s
-Cycles elapsed       : 13154666166
-Measured CPU freq    : 3.41754 GHz
-Checksum             : 2.74405e+06
+Avg Achieved FLOP    : 1826.89 GFLOP/s
+Cycles elapsed       : 11972383729
+Measured CPU freq    : 3.41753 GHz
+sum                  : 2.05752
 
  Performance counter stats for './main':
 
-         90,034.56 msec task-clock                #   23.383 CPUs utilized          
-             1,332      context-switches          #   14.794 /sec                   
-                40      cpu-migrations            #    0.444 /sec                   
-               291      page-faults               #    3.232 /sec                   
-   443,002,046,830      cycles                    #    4.920 GHz                    
-   300,142,917,222      instructions              #    0.68  insn per cycle         
-   100,030,393,458      branches                  #    1.111 G/sec                  
-           382,083      branch-misses             #    0.00% of all branches        
+         80,781.54 msec task-clock                #   23.051 CPUs utilized          
+             2,372      context-switches          #   29.363 /sec                   
+               159      cpu-migrations            #    1.968 /sec                   
+               393      page-faults               #    4.865 /sec                   
+   389,859,205,718      cycles                    #    4.826 GHz                    
+   500,717,583,488      instructions              #    1.28  insn per cycle         
+    50,156,378,434      branches                  #  620.889 M/sec                  
+         1,403,191      branch-misses             #    0.00% of all branches        
 
-       3.850457958 seconds time elapsed
+       3.504431292 seconds time elapsed
 
-      90.032370000 seconds user
-       0.003998000 seconds sys
+      80.759760000 seconds user
+       0.023995000 seconds sys
 ```
-We also printed the first element of output after the exectution so the compiler does not optimize away everything. The main things to see is we achieve 1688.23 GFLOP/s and measured a clock freq of 3.41GHz. So our default clock freq matches from what was reported by the source. So we achieved 92.50% of the peak theoretical FLOPS
+We also print the sum of output after the exectution so the compiler does not optimize away everything. The main things to see is we achieve 1826.89 GFLOP/s and measured a clock freq of 4.826 GHz, there is also a huge difference between the clock frequencies measured by perf and __rdtscp. The reason could be __rdtscp does not vary according to the current core's frequency. Infact after reading more about it from [Time_Stamp_Counter](https://en.wikipedia.org/wiki/Time_Stamp_Counter) I came to realize it's use is highly discouraged. We achieved 96.43% of the theoretical peak flops. I think this is the practical best performance we can achieve as we never get the clock to run at turbo freq for all p and e core for all the avx256 instruction and there will be some dips in the clock freq degrading performance
 
 Only running the [cpu_flops.cpp](./cpu_flops.cpp) on the p cores using
 ```bash
@@ -99,40 +113,56 @@ export OMP_NUM_THREADS=16
 export OMP_PLACES="{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}"
 export OMP_PROC_BIND=close
 
-g++ -fopenmp -g -O3 -march=native -ffast-math -funroll-loops cpu_flops.cpp -o main
+g++ -fopenmp -g -O3 -march=native cpu_flops.cc -o main
 
 ./main
 ```
 
 gives us
 ```bash
-Wall time            : 1.8551 s
-Total FLOPs          : 1600 GFLOP
-Achieved FLOPS       : 862.489 GFLOP/s
-Cycles elapsed       : 6339862401
-Measured CPU freq    : 3.41754 GHz
-Checksum             : 1.02817e+06
+Avg Wall time        : 4.79077 s
+Total FLOPs          : 6400 GFLOP
+Avg Achieved FLOP    : 1335.9 GFLOP/s
+Cycles elapsed       : 16372601962
+Measured CPU freq    : 3.41753 GHz
+sum                  : 2.05752
 ```
-which is 99.08% of the theoretical max of p cores, while running the same for only e cores using
+
+Thus the p cores can reach 99.93% of their peak flops. while running it only on the e cores using
 ```bash
 export OMP_NUM_THREADS=8
 export OMP_PLACES="{16,17,18,19,20,21,22,23}"
 export OMP_PROC_BIND=close
 
-g++ -fopenmp -g -O3 -march=native -ffast-math -funroll-loops cpu_flops.cpp -o main
+g++ -fopenmp -g -O3 -march=native cpu_flops.cc -o main
 
 ./main
 ```
-gives
+gives us
 ```bash
-Wall time            : 4.47915 s
-Total FLOPs          : 1600 GFLOP
-Achieved FLOPS       : 357.211 GFLOP/s
-Cycles elapsed       : 15307646282
+Avg Wall time        : 11.9549 s
+Total FLOPs          : 6400 GFLOP
+Avg Achieved FLOP    : 535.346 GFLOP/s
+Cycles elapsed       : 40856183393
 Measured CPU freq    : 3.41753 GHz
-Checksum             : 1.02817e+06
+sum                  : 2.05752
 ```
-which is only 82% of the theoretical max that the e cores can achieve, I don't have any definite answers as to why only e cores are underperforming but I could be that they are more optimized for energy efficient compared to performance
+which is also 99.50% of the theoretical max that the e cores can achieve, I don't have any definite answers as to why only individually e cores and p cores are able to achieve max flops while together they fall short 2-3%
+
+Looking at generated assembly code from [cpu_flops.s](./cpu_flops.s) we see that the compiler has generated the 8 fma256 instruction for us
+```assembly
+.L4:
+	vfmadd231ps	%ymm0, %ymm1, %ymm2
+	vfmadd231ps	%ymm0, %ymm1, %ymm9
+	vfmadd231ps	%ymm0, %ymm1, %ymm8
+	vfmadd231ps	%ymm0, %ymm1, %ymm7
+	vfmadd231ps	%ymm0, %ymm1, %ymm6
+	vfmadd231ps	%ymm0, %ymm1, %ymm5
+	vfmadd231ps	%ymm0, %ymm1, %ymm4
+	vfmadd231ps	%ymm0, %ymm1, %ymm3
+	subq	$1, %rax
+	jne	.L4
+```
 
 ## Comparison with CP3B Solution
 
@@ -140,17 +170,71 @@ For comparison with my fastest cp3b solution, we use the exact same code as the 
 ```
 export OMP_NUM_THREADS=24
 
-g++ -fopenmp -g -O3 -march=native -ffast-math -funroll-loops cp3b.cc -o main
+g++ -fopenmp -g -O3 -march=native cp3b.cc -o main
 
-./main
+perf stat ./main
 ```
 we see the following output
 ```
-Wall time            : 2.30501 s
+Wall time            : 1.73274 s
 Total FLOPs          : 2744 GFLOP
-Achieved FLOPS       : 1190.45 GFLOP/s
-Cycles elapsed       : 7877479611
-Measured CPU freq    : 3.41754 GHz
+Achieved FLOPS       : 1583.62 GFLOP/s
+Cycles elapsed       : 5921721988
+Measured CPU freq    : 3.41756 GHz
 Checksum             : -0.00906668
+
+ Performance counter stats for './main':
+
+         45,399.47 msec task-clock                #   11.634 CPUs utilized          
+               689      context-switches          #   15.176 /sec                   
+                25      cpu-migrations            #    0.551 /sec                   
+           683,659      page-faults               #   15.059 K/sec                  
+   206,358,697,147      cycles                    #    4.545 GHz                    
+   386,717,416,506      instructions              #    1.87  insn per cycle         
+    15,785,912,832      branches                  #  347.711 M/sec                  
+        62,951,893      branch-misses             #    0.40% of all branches        
+
+       3.902154516 seconds time elapsed
+
+      44.625873000 seconds user
+       0.776241000 seconds sys
 ```
-We achieved 91.16% of the theoretical maximum
+We achieved 83.59% of the theoretical peak flops
+
+Now again inspecting the assembly at [cp3b.s](./cp3b.s) we see the compiler did the right thing the generated the vectorized code for us
+```assembly
+.L115:
+	vmovaps	(%r8), %ymm1
+	vbroadcastss	(%rdx), %ymm2
+	addq	$32, %rdx
+	vmovaps	(%r8,%rcx,4), %ymm0
+	addq	$32, %r8
+	vfmadd231ps	%ymm2, %ymm1, %ymm4
+	vfmadd213ps	192(%rsp), %ymm0, %ymm2
+	vmovaps	%ymm2, 192(%rsp)
+	vbroadcastss	-28(%rdx), %ymm2
+	vfmadd231ps	%ymm2, %ymm1, %ymm9
+	vfmadd213ps	128(%rsp), %ymm0, %ymm2
+	vmovaps	%ymm2, 128(%rsp)
+	vbroadcastss	-24(%rdx), %ymm2
+	vfmadd231ps	%ymm2, %ymm1, %ymm8
+	vfmadd231ps	%ymm2, %ymm0, %ymm15
+	vbroadcastss	-20(%rdx), %ymm2
+	vfmadd231ps	%ymm2, %ymm1, %ymm7
+	vfmadd231ps	%ymm2, %ymm0, %ymm11
+	vbroadcastss	-16(%rdx), %ymm2
+	vfmadd231ps	%ymm2, %ymm1, %ymm6
+	vfmadd231ps	%ymm2, %ymm0, %ymm10
+	vbroadcastss	-12(%rdx), %ymm2
+	vfmadd231ps	%ymm2, %ymm1, %ymm5
+	vfmadd231ps	%ymm2, %ymm0, %ymm14
+	vbroadcastss	-8(%rdx), %ymm2
+	vfmadd231ps	%ymm2, %ymm1, %ymm3
+	vfmadd231ps	%ymm2, %ymm0, %ymm13
+	vbroadcastss	-4(%rdx), %ymm2
+	vfmadd213ps	160(%rsp), %ymm2, %ymm1
+	vfmadd231ps	%ymm2, %ymm0, %ymm12
+	vmovaps	%ymm1, 160(%rsp)
+	cmpq	%rsi, %rdx
+	jne	.L115
+```
