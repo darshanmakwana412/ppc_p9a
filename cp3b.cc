@@ -17,9 +17,9 @@ constexpr int NR = 16;
 constexpr int MC = 256; // Load ndata[ic: ic + MC][:] in L3 cache block
 constexpr int KC = 224;
 constexpr int NC = 128;
-// Padding Py has to be multiple of 16 as well as a multiple of MC
+
 constexpr int Px = 1;
-constexpr int Py = 16;
+constexpr int Py = 32;
 
 struct Matrix {
     int ny, nx;

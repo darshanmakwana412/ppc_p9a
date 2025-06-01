@@ -4,4 +4,4 @@ export OMP_PROC_BIND=close
 
 g++ -fopenmp -g -O3 -march=native cp3b.cc -o main
 
-perf stat ./main
+./main
